@@ -1,19 +1,17 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import sqlite3
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LogisticRegression
+import numpy as np
 
-st.set_page_config(page_title="SNBP Predictor + Rekomendasi", layout="wide")
+st.set_page_config(page_title="SNBP Predictor v2", layout="wide")
 
 # ================= DATABASE =================
 conn = sqlite3.connect("snbp.db", check_same_thread=False)
 c = conn.cursor()
-
 c.execute("""
 CREATE TABLE IF NOT EXISTS siswa (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
     nama TEXT,
     nilai REAL,
     ranking INTEGER,
@@ -22,104 +20,109 @@ CREATE TABLE IF NOT EXISTS siswa (
     akreditasi TEXT,
     ptn TEXT,
     jurusan TEXT,
-    peluang REAL,
-    rekomendasi TEXT
+    peluang REAL
 )
 """)
 conn.commit()
 
-# ================= MODEL =================
+# ================= LOGIN =================
+if "login" not in st.session_state:
+    st.session_state.login = False
+
+def login():
+    st.title("🔐 Login Guru")
+    user = st.text_input("Username")
+    pw = st.text_input("Password", type="password")
+    if st.button("Login"):
+        if user == "guru" and pw == "123":
+            st.session_state.login = True
+            st.success("Login berhasil")
+        else:
+            st.error("Username / Password salah")
+
+if not st.session_state.login:
+    login()
+    st.stop()
+
+# ================= SIDEBAR =================
+menu = st.sidebar.selectbox("Menu", ["Home", "Input Data", "Data & Grafik", "Logout"])
+st.sidebar.info("⚠️ Prediksi hanya estimasi, bukan hasil resmi SNBP")
+
+# ================= MODEL ML (DUMMY TRAINING) =================
+# Data contoh training (simulasi)
 X = np.array([
-    [85,2,30,1,1],
-    [70,10,30,0,0],
-    [90,1,30,1,1],
-    [60,15,30,0,0],
-    [88,3,30,1,1],
-    [75,8,30,0,1]
+    [85, 2, 30, 1, 1],
+    [70, 10, 30, 0, 0],
+    [90, 1, 30, 1, 1],
+    [60, 15, 30, 0, 0],
+    [88, 3, 30, 1, 1],
+    [75, 8, 30, 0, 1]
 ])
 y = np.array([1,0,1,0,1,0])
 
 model = LogisticRegression()
-model.fit(X,y)
-
-# ================= REKOMENDASI =================
-rekomendasi_ptn = {
-    "tinggi":[("UI","Teknik Informatika"),("ITB","Teknik Elektro"),("UGM","Kedokteran")],
-    "sedang":[("UNNES","Pendidikan Fisika"),("UNY","Pendidikan Matematika"),("UNS","Teknik Lingkungan")],
-    "aman":[("UNM","Pendidikan IPA"),("UNESA","Fisika"),("UIN","Sistem Informasi")]
-}
-
-# ================= SIDEBAR =================
-menu = st.sidebar.selectbox("Menu",["Home","Upload Excel","Data & Grafik"])
-st.sidebar.info("Prediksi hanya estimasi, bukan keputusan resmi SNBP")
+model.fit(X, y)
 
 # ================= HOME =================
-if menu=="Home":
-    st.title("🎓 SNBP Predictor + Rekomendasi PTN & Jurusan")
-    st.write("Upload Excel → Prediksi peluang → Rekomendasi PTN & Jurusan")
+if menu == "Home":
+    st.title("🎓 SNBP Predictor v2")
+    st.write("""
+    Website ini membantu guru memprediksi peluang siswa lolos SNBP berdasarkan:
+    - Nilai rapor
+    - Ranking
+    - Prestasi
+    - Akreditasi
+    - PTN & Jurusan
+    """)
 
-# ================= UPLOAD =================
-elif menu=="Upload Excel":
-    st.title("📂 Upload Excel")
-    file = st.file_uploader("Upload Excel (.xlsx)", type=["xlsx"])
+# ================= INPUT DATA =================
+elif menu == "Input Data":
+    st.title("📝 Input Data Siswa")
 
-    if file:
-        df = pd.read_excel(file)
-        st.dataframe(df)
+    nama = st.text_input("Nama Siswa")
+    nilai = st.number_input("Rata-rata Nilai Rapor", 0.0, 100.0, 80.0)
+    ranking = st.number_input("Ranking", 1, 50, 5)
+    jumlah = st.number_input("Jumlah siswa kelas", 1, 50, 30)
 
-        kolom_wajib = ["Nama","Nilai","Ranking","Jumlah","Prestasi","Akreditasi","PTN","Jurusan"]
+    prestasi = st.selectbox("Prestasi", ["Tidak", "Ya"])
+    akreditasi = st.selectbox("Akreditasi Sekolah", ["A", "B", "C"])
 
-        if not all(k in df.columns for k in kolom_wajib):
-            st.error("Format kolom salah!")
-            st.write(kolom_wajib)
+    ptn = st.selectbox("Pilih PTN", ["UI", "UGM", "ITB", "UNPAD", "UNNES"])
+    jurusan = st.selectbox("Pilih Jurusan", ["Teknik", "Kedokteran", "Pendidikan", "Ekonomi", "Sains"])
+
+    prestasi_num = 1 if prestasi == "Ya" else 0
+    akreditasi_num = 1 if akreditasi == "A" else 0
+
+    if st.button("Prediksi"):
+        input_data = np.array([[nilai, ranking, jumlah, prestasi_num, akreditasi_num]])
+        prob = model.predict_proba(input_data)[0][1] * 100
+
+        if prob >= 75:
+            kategori = "Tinggi"
+            rekomendasi = "Bisa mencoba PTN favorit"
+        elif prob >= 50:
+            kategori = "Sedang"
+            rekomendasi = "Pilih PTN peluang aman"
         else:
-            if st.button("Proses & Prediksi"):
-                for i,row in df.iterrows():
+            kategori = "Rendah"
+            rekomendasi = "Perlu alternatif SNBT / kampus lain"
 
-                    prestasi_num = 1 if str(row["Prestasi"]).lower()=="ya" else 0
-                    akreditasi_num = 1 if str(row["Akreditasi"]).upper()=="A" else 0
+        st.success(f"Peluang diterima: {prob:.1f}%")
+        st.write("Kategori:", kategori)
+        st.write("Rekomendasi:", rekomendasi)
 
-                    X_input = np.array([[row["Nilai"],row["Ranking"],row["Jumlah"],prestasi_num,akreditasi_num]])
-                    prob = model.predict_proba(X_input)[0][1]*100
+        c.execute("INSERT INTO siswa VALUES (?,?,?,?,?,?,?,?,?)",
+                  (nama, nilai, ranking, jumlah, prestasi, akreditasi, ptn, jurusan, prob))
+        conn.commit()
 
-                    if prob>=80:
-                        kategori="tinggi"
-                    elif prob>=60:
-                        kategori="sedang"
-                    else:
-                        kategori="aman"
-
-                    rekom_list = rekomendasi_ptn[kategori]
-                    rekom_text = "; ".join([f"{p}-{j}" for p,j in rekom_list])
-
-                    c.execute("""
-                    INSERT INTO siswa
-                    (nama,nilai,ranking,jumlah,prestasi,akreditasi,ptn,jurusan,peluang,rekomendasi)
-                    VALUES (?,?,?,?,?,?,?,?,?,?)
-                    """,(
-                        row["Nama"],
-                        row["Nilai"],
-                        row["Ranking"],
-                        row["Jumlah"],
-                        row["Prestasi"],
-                        row["Akreditasi"],
-                        row["PTN"],
-                        row["Jurusan"],
-                        round(prob,2),
-                        rekom_text
-                    ))
-
-                conn.commit()
-                st.success("✅ Data berhasil diproses & disimpan")
-
-# ================= DATA =================
-elif menu=="Data & Grafik":
+# ================= DATA & GRAFIK =================
+elif menu == "Data & Grafik":
     st.title("📊 Data & Grafik")
 
     df = pd.read_sql("SELECT * FROM siswa", conn)
 
     if df.empty:
-        st.warning("Belum ada data")
+        st.warning("Belum ada data.")
     else:
         st.dataframe(df)
 
@@ -130,4 +133,14 @@ elif menu=="Data & Grafik":
         plt.xticks(rotation=45)
         st.pyplot(fig)
 
-        st.download_button("Download CSV", df.to_csv(index=False), "hasil_snbp.csv")
+        st.download_button(
+            "Download CSV",
+            df.to_csv(index=False),
+            "data_snbp.csv",
+            "text/csv"
+        )
+
+# ================= LOGOUT =================
+elif menu == "Logout":
+    st.session_state.login = False
+    st.success("Logout berhasil")
