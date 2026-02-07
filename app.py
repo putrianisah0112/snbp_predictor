@@ -123,22 +123,44 @@ elif menu == "Upload Excel":
 
     if file:
         df = pd.read_excel(file)
+
+        st.subheader("Preview Data")
         st.dataframe(df)
 
-        if st.button("Proses & Prediksi"):
-            for i, row in df.iterrows():
-                prestasi_num = 1 if row["Prestasi"] == "Ya" else 0
-                akreditasi_num = 1 if row["Akreditasi"] == "A" else 0
+        required_cols = ["Nama","Nilai","Ranking","Jumlah","Prestasi","Akreditasi","PTN","Jurusan"]
 
-                input_data = np.array([[row["Nilai"], row["Ranking"], row["Jumlah"], prestasi_num, akreditasi_num]])
-                prob = model.predict_proba(input_data)[0][1] * 100
+        if not all(col in df.columns for col in required_cols):
+            st.error("Kolom Excel tidak sesuai format!")
+            st.write("Kolom wajib:", required_cols)
+        else:
+            if st.button("Proses & Prediksi"):
+                for i, row in df.iterrows():
 
-                c.execute("INSERT INTO siswa VALUES (?,?,?,?,?,?,?,?,?)",
-                          (row["Nama"], row["Nilai"], row["Ranking"], row["Jumlah"],
-                           row["Prestasi"], row["Akreditasi"], row["PTN"], row["Jurusan"], prob))
+                    prestasi_num = 1 if str(row["Prestasi"]).lower() == "ya" else 0
+                    akreditasi_num = 1 if str(row["Akreditasi"]).upper() == "A" else 0
 
-            conn.commit()
-            st.success("Data Excel berhasil diproses & disimpan!")
+                    input_data = np.array([[ 
+                        row["Nilai"], 
+                        row["Ranking"], 
+                        row["Jumlah"], 
+                        prestasi_num, 
+                        akreditasi_num
+                    ]])
+
+                    prob = model.predict_proba(input_data)[0][1] * 100
+
+                    c.execute("""
+                        INSERT INTO siswa 
+                        (nama,nilai,ranking,jumlah,prestasi,akreditasi,ptn,jurusan,probabilitas)
+                        VALUES (?,?,?,?,?,?,?,?,?)
+                    """, (
+                        row["Nama"], row["Nilai"], row["Ranking"], row["Jumlah"],
+                        row["Prestasi"], row["Akreditasi"], row["PTN"], row["Jurusan"], round(prob,2)
+                    ))
+
+                conn.commit()
+                st.success("✅ Data Excel berhasil diproses & disimpan!")
+
 
 
 # ================= DATA & GRAFIK =================
@@ -170,4 +192,5 @@ elif menu == "Data & Grafik":
 elif menu == "Logout":
     st.session_state.login = False
     st.success("Logout berhasil")
+
 
