@@ -1,17 +1,19 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import sqlite3
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LogisticRegression
-import numpy as np
 
-st.set_page_config(page_title="SNBP Predictor v2", layout="wide")
+st.set_page_config(page_title="SNBP Predictor", layout="wide")
 
 # ================= DATABASE =================
 conn = sqlite3.connect("snbp.db", check_same_thread=False)
 c = conn.cursor()
+
 c.execute("""
 CREATE TABLE IF NOT EXISTS siswa (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     nama TEXT,
     nilai REAL,
     ranking INTEGER,
@@ -25,31 +27,7 @@ CREATE TABLE IF NOT EXISTS siswa (
 """)
 conn.commit()
 
-# ================= LOGIN =================
-if "login" not in st.session_state:
-    st.session_state.login = False
-
-def login():
-    st.title("🔐 Login Guru")
-    user = st.text_input("Username")
-    pw = st.text_input("Password", type="password")
-    if st.button("Login"):
-        if user == "guru" and pw == "123":
-            st.session_state.login = True
-            st.success("Login berhasil")
-        else:
-            st.error("Username / Password salah")
-
-if not st.session_state.login:
-    login()
-    st.stop()
-
-# ================= SIDEBAR =================
-menu = st.sidebar.selectbox("Menu", ["Home", "Input Data", "Upload Excel", "Data & Grafik", "Logout"])
-st.sidebar.info("⚠️ Prediksi hanya estimasi, bukan hasil resmi SNBP")
-
-# ================= MODEL ML (DUMMY TRAINING) =================
-# Data contoh training (simulasi)
+# ================= MODEL ML (dummy training) =================
 X = np.array([
     [85, 2, 30, 1, 1],
     [70, 10, 30, 0, 0],
@@ -63,74 +41,38 @@ y = np.array([1,0,1,0,1,0])
 model = LogisticRegression()
 model.fit(X, y)
 
+# ================= SIDEBAR =================
+menu = st.sidebar.selectbox("Menu", ["Home", "Upload Excel", "Data & Grafik"])
+st.sidebar.info("⚠️ Prediksi hanya estimasi, bukan hasil resmi SNBP")
+
 # ================= HOME =================
 if menu == "Home":
-    st.title("🎓 SNBP Predictor v2")
+    st.title("🎓 SNBP Predictor")
     st.write("""
-    Website ini membantu guru memprediksi peluang siswa lolos SNBP berdasarkan:
-    - Nilai rapor
-    - Ranking
-    - Prestasi
-    - Akreditasi
-    - PTN & Jurusan
-    """)
+Website ini memprediksi peluang SNBP siswa berdasarkan:
+- Nilai rapor
+- Ranking
+- Prestasi
+- Akreditasi sekolah
 
-# ================= INPUT DATA =================
-elif menu == "Input Data":
-    st.title("📝 Input Data Siswa")
+Gunakan menu **Upload Excel** untuk memasukkan data siswa.
+""")
 
-    nama = st.text_input("Nama Siswa")
-    nilai = st.number_input("Rata-rata Nilai Rapor", 0.0, 100.0, 80.0)
-    ranking = st.number_input("Ranking", 1, 50, 5)
-    jumlah = st.number_input("Jumlah siswa kelas", 1, 50, 30)
-
-    prestasi = st.selectbox("Prestasi", ["Tidak", "Ya"])
-    akreditasi = st.selectbox("Akreditasi Sekolah", ["A", "B", "C"])
-
-    ptn = st.selectbox("Pilih PTN", ["UI", "UGM", "ITB", "UNPAD", "UNNES"])
-    jurusan = st.selectbox("Pilih Jurusan", ["Teknik", "Kedokteran", "Pendidikan", "Ekonomi", "Sains"])
-
-    prestasi_num = 1 if prestasi == "Ya" else 0
-    akreditasi_num = 1 if akreditasi == "A" else 0
-
-    if st.button("Prediksi"):
-        input_data = np.array([[nilai, ranking, jumlah, prestasi_num, akreditasi_num]])
-        prob = model.predict_proba(input_data)[0][1] * 100
-
-        if prob >= 75:
-            kategori = "Tinggi"
-            rekomendasi = "Bisa mencoba PTN favorit"
-        elif prob >= 50:
-            kategori = "Sedang"
-            rekomendasi = "Pilih PTN peluang aman"
-        else:
-            kategori = "Rendah"
-            rekomendasi = "Perlu alternatif SNBT / kampus lain"
-
-        st.success(f"Peluang diterima: {prob:.1f}%")
-        st.write("Kategori:", kategori)
-        st.write("Rekomendasi:", rekomendasi)
-
-        c.execute("INSERT INTO siswa VALUES (?,?,?,?,?,?,?,?,?)",
-                  (nama, nilai, ranking, jumlah, prestasi, akreditasi, ptn, jurusan, prob))
-        conn.commit()
-
-#============ INPUT DATA ==============
+# ================= UPLOAD EXCEL =================
 elif menu == "Upload Excel":
-    st.title("📂 Upload Data Excel Siswa")
+    st.title("📂 Upload Data Excel")
 
     file = st.file_uploader("Upload file Excel (.xlsx)", type=["xlsx"])
 
     if file:
         df = pd.read_excel(file)
-
         st.subheader("Preview Data")
         st.dataframe(df)
 
         required_cols = ["Nama","Nilai","Ranking","Jumlah","Prestasi","Akreditasi","PTN","Jurusan"]
 
         if not all(col in df.columns for col in required_cols):
-            st.error("Kolom Excel tidak sesuai format!")
+            st.error("❌ Format kolom Excel salah!")
             st.write("Kolom wajib:", required_cols)
         else:
             if st.button("Proses & Prediksi"):
@@ -151,7 +93,7 @@ elif menu == "Upload Excel":
 
                     c.execute("""
                         INSERT INTO siswa 
-                        (nama,nilai,ranking,jumlah,prestasi,akreditasi,ptn,jurusan,probabilitas)
+                        (nama,nilai,ranking,jumlah,prestasi,akreditasi,ptn,jurusan,peluang)
                         VALUES (?,?,?,?,?,?,?,?,?)
                     """, (
                         row["Nama"], row["Nilai"], row["Ranking"], row["Jumlah"],
@@ -159,9 +101,7 @@ elif menu == "Upload Excel":
                     ))
 
                 conn.commit()
-                st.success("✅ Data Excel berhasil diproses & disimpan!")
-
-
+                st.success("✅ Data berhasil diproses & disimpan!")
 
 # ================= DATA & GRAFIK =================
 elif menu == "Data & Grafik":
@@ -174,6 +114,7 @@ elif menu == "Data & Grafik":
     else:
         st.dataframe(df)
 
+        st.subheader("Grafik Peluang SNBP")
         fig, ax = plt.subplots()
         ax.bar(df["nama"], df["peluang"])
         ax.set_ylabel("Peluang (%)")
@@ -184,13 +125,6 @@ elif menu == "Data & Grafik":
         st.download_button(
             "Download CSV",
             df.to_csv(index=False),
-            "data_snbp.csv",
+            "hasil_snbp.csv",
             "text/csv"
         )
-
-# ================= LOGOUT =================
-elif menu == "Logout":
-    st.session_state.login = False
-    st.success("Logout berhasil")
-
-
