@@ -45,7 +45,7 @@ if not st.session_state.login:
     st.stop()
 
 # ================= SIDEBAR =================
-menu = st.sidebar.selectbox("Menu", ["Home", "Input Data", "Data & Grafik", "Logout"])
+menu = st.sidebar.selectbox("Menu", ["Home", "Input Data", "Upload Excel", "Data & Grafik", "Logout"])
 st.sidebar.info("⚠️ Prediksi hanya estimasi, bukan hasil resmi SNBP")
 
 # ================= MODEL ML (DUMMY TRAINING) =================
@@ -115,6 +115,32 @@ elif menu == "Input Data":
                   (nama, nilai, ranking, jumlah, prestasi, akreditasi, ptn, jurusan, prob))
         conn.commit()
 
+#============ INPUT DATA ==============
+elif menu == "Upload Excel":
+    st.title("📂 Upload Data Excel Siswa")
+
+    file = st.file_uploader("Upload file Excel (.xlsx)", type=["xlsx"])
+
+    if file:
+        df = pd.read_excel(file)
+        st.dataframe(df)
+
+        if st.button("Proses & Prediksi"):
+            for i, row in df.iterrows():
+                prestasi_num = 1 if row["Prestasi"] == "Ya" else 0
+                akreditasi_num = 1 if row["Akreditasi"] == "A" else 0
+
+                input_data = np.array([[row["Nilai"], row["Ranking"], row["Jumlah"], prestasi_num, akreditasi_num]])
+                prob = model.predict_proba(input_data)[0][1] * 100
+
+                c.execute("INSERT INTO siswa VALUES (?,?,?,?,?,?,?,?,?)",
+                          (row["Nama"], row["Nilai"], row["Ranking"], row["Jumlah"],
+                           row["Prestasi"], row["Akreditasi"], row["PTN"], row["Jurusan"], prob))
+
+            conn.commit()
+            st.success("Data Excel berhasil diproses & disimpan!")
+
+
 # ================= DATA & GRAFIK =================
 elif menu == "Data & Grafik":
     st.title("📊 Data & Grafik")
@@ -144,3 +170,4 @@ elif menu == "Data & Grafik":
 elif menu == "Logout":
     st.session_state.login = False
     st.success("Logout berhasil")
+
