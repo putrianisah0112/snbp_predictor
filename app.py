@@ -56,4 +56,78 @@ st.sidebar.info("Prediksi hanya estimasi, bukan keputusan resmi SNBP")
 # ================= HOME =================
 if menu=="Home":
     st.title("🎓 SNBP Predictor + Rekomendasi PTN & Jurusan")
-    st.write("
+    st.write("Upload Excel → Prediksi peluang → Rekomendasi PTN & Jurusan")
+
+# ================= UPLOAD =================
+elif menu=="Upload Excel":
+    st.title("📂 Upload Excel")
+    file = st.file_uploader("Upload Excel (.xlsx)", type=["xlsx"])
+
+    if file:
+        df = pd.read_excel(file)
+        st.dataframe(df)
+
+        kolom_wajib = ["Nama","Nilai","Ranking","Jumlah","Prestasi","Akreditasi","PTN","Jurusan"]
+
+        if not all(k in df.columns for k in kolom_wajib):
+            st.error("Format kolom salah!")
+            st.write(kolom_wajib)
+        else:
+            if st.button("Proses & Prediksi"):
+                for i,row in df.iterrows():
+
+                    prestasi_num = 1 if str(row["Prestasi"]).lower()=="ya" else 0
+                    akreditasi_num = 1 if str(row["Akreditasi"]).upper()=="A" else 0
+
+                    X_input = np.array([[row["Nilai"],row["Ranking"],row["Jumlah"],prestasi_num,akreditasi_num]])
+                    prob = model.predict_proba(X_input)[0][1]*100
+
+                    if prob>=80:
+                        kategori="tinggi"
+                    elif prob>=60:
+                        kategori="sedang"
+                    else:
+                        kategori="aman"
+
+                    rekom_list = rekomendasi_ptn[kategori]
+                    rekom_text = "; ".join([f"{p}-{j}" for p,j in rekom_list])
+
+                    c.execute("""
+                    INSERT INTO siswa
+                    (nama,nilai,ranking,jumlah,prestasi,akreditasi,ptn,jurusan,peluang,rekomendasi)
+                    VALUES (?,?,?,?,?,?,?,?,?,?)
+                    """,(
+                        row["Nama"],
+                        row["Nilai"],
+                        row["Ranking"],
+                        row["Jumlah"],
+                        row["Prestasi"],
+                        row["Akreditasi"],
+                        row["PTN"],
+                        row["Jurusan"],
+                        round(prob,2),
+                        rekom_text
+                    ))
+
+                conn.commit()
+                st.success("✅ Data berhasil diproses & disimpan")
+
+# ================= DATA =================
+elif menu=="Data & Grafik":
+    st.title("📊 Data & Grafik")
+
+    df = pd.read_sql("SELECT * FROM siswa", conn)
+
+    if df.empty:
+        st.warning("Belum ada data")
+    else:
+        st.dataframe(df)
+
+        fig, ax = plt.subplots()
+        ax.bar(df["nama"], df["peluang"])
+        ax.set_ylabel("Peluang (%)")
+        ax.set_xlabel("Nama")
+        plt.xticks(rotation=45)
+        st.pyplot(fig)
+
+        st.download_button("Download CSV", df.to_csv(index=False), "hasil_snbp.csv")
