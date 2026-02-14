@@ -5,6 +5,7 @@ import sqlite3
 import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier
 from openpyxl import Workbook
+import os
 
 st.set_page_config(page_title="SNBP Predictor Advanced ML", layout="wide")
 
@@ -12,18 +13,29 @@ st.set_page_config(page_title="SNBP Predictor Advanced ML", layout="wide")
 conn = sqlite3.connect("snbp.db", check_same_thread=False)
 c = conn.cursor()
 
-c.execute("""
-CREATE TABLE IF NOT EXISTS riwayat (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nama_siswa TEXT,
-    rata_nilai REAL,
-    akreditasi TEXT,
-    ptn TEXT,
-    jurusan TEXT,
-    peluang REAL
-)
-""")
-conn.commit()
+def init_db():
+    # cek apakah kolom nama_siswa sudah ada
+    c.execute("PRAGMA table_info(riwayat)")
+    columns = [col[1] for col in c.fetchall()]
+
+    if "nama_siswa" not in columns:
+        c.execute("DROP TABLE IF EXISTS riwayat")
+        conn.commit()
+
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS riwayat (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nama_siswa TEXT,
+        rata_nilai REAL,
+        akreditasi TEXT,
+        ptn TEXT,
+        jurusan TEXT,
+        peluang REAL
+    )
+    """)
+    conn.commit()
+
+init_db()
 
 # ================= LOGIN =================
 if "login" not in st.session_state:
@@ -31,8 +43,8 @@ if "login" not in st.session_state:
 
 def login():
     st.title("🔐 Login Guru")
-    user = st.text_input("Username:guru")
-    pw = st.text_input("Password:123", type="password")
+    user = st.text_input("Username")
+    pw = st.text_input("Password", type="password")
     if st.button("Login"):
         if user == "guru" and pw == "123":
             st.session_state.login = True
@@ -103,14 +115,14 @@ model.fit(X_train, y_train)
 
 # ================= HOME =================
 if menu == "Home":
-    st.title("🎓 SNBP Predictor Advanced ML")
+    st.title("🎓 SNBP Predictor Advanced ML (Fix Database)")
     st.write("""
     Fitur:
     - Upload nilai rapor Excel
     - Input nama siswa
     - Prediksi peluang SNBP semua PTN & jurusan
     - Machine Learning RandomForest
-    - Riwayat tersimpan database
+    - Database auto-fix
     - Grafik & ranking jurusan
     """)
 
@@ -193,7 +205,6 @@ elif menu == "Data Riwayat":
         st.warning("Belum ada data.")
     else:
         st.dataframe(df)
-
         st.download_button(
             "Download Riwayat CSV",
             df.to_csv(index=False),
