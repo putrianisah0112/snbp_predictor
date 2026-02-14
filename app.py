@@ -3,19 +3,21 @@ import pandas as pd
 import numpy as np
 import sqlite3
 import matplotlib.pyplot as plt
-from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from openpyxl import Workbook
 
-st.set_page_config(page_title="SNBP Predictor Machine Learning", layout="wide")
+st.set_page_config(page_title="SNBP Predictor Advanced ML", layout="wide")
 
 # ================= DATABASE =================
-conn = sqlite3.connect("snbp_ml.db", check_same_thread=False)
+conn = sqlite3.connect("snbp.db", check_same_thread=False)
 c = conn.cursor()
+
 c.execute("""
-CREATE TABLE IF NOT EXISTS hasil (
-    nama TEXT,
-    akreditasi TEXT,
+CREATE TABLE IF NOT EXISTS riwayat (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     rata_nilai REAL,
-    universitas TEXT,
+    akreditasi TEXT,
+    ptn TEXT,
     jurusan TEXT,
     peluang REAL
 )
@@ -34,7 +36,6 @@ def login():
         if user == "guru" and pw == "123":
             st.session_state.login = True
             st.success("Login berhasil")
-            st.rerun()
         else:
             st.error("Username / Password salah")
 
@@ -42,15 +43,27 @@ if not st.session_state.login:
     login()
     st.stop()
 
-# ================= SIDEBAR =================
-menu = st.sidebar.selectbox(
-    "Menu",
-    ["Home", "Download Template", "Upload & Prediksi (ML)", "Data & Grafik", "Logout"]
-)
-st.sidebar.info("⚠️ Prediksi hanya estimasi, bukan hasil resmi SNBP")
+# ================= TEMPLATE GENERATOR =================
+def create_template():
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Nilai Rapor"
+    headers = ["Mapel","Sem1","Sem2","Sem3","Sem4","Sem5"]
+    ws.append(headers)
 
-# ================= DATA UNIVERSITAS & JURUSAN =================
-universitas_list = [
+    subjects = ["Matematika","Bahasa Indonesia","Bahasa Inggris","Fisika","Kimia","Biologi"]
+    for s in subjects:
+        ws.append([s,"","","","",""])
+
+    wb.save("template_nilai_rapor.xlsx")
+
+create_template()
+
+# ================= SIDEBAR =================
+menu = st.sidebar.selectbox("Menu", ["Home","Upload & Prediksi","Data Riwayat","Logout"])
+
+# ================= PTN & JURUSAN =================
+ptn_list = [
     "Universitas Indonesia","Universitas Gadjah Mada","Universitas Sriwijaya",
     "Universitas Airlangga","Universitas Diponegoro","Institut Teknologi Bandung",
     "Institut Pertanian Bogor","Universitas Brawijaya",
@@ -58,139 +71,126 @@ universitas_list = [
 ]
 
 jurusan_list = [
-    "Kedokteran","Farmasi","Keperawatan",
-    "Teknik Informatika","Teknik Sipil","Teknik Mesin",
-    "Matematika","Fisika","Kimia","Biologi",
-    "Ekonomi","Manajemen","Akuntansi",
-    "Pendidikan Matematika","Pendidikan Fisika","Pendidikan Biologi"
+    "Kedokteran","Teknik","Hukum","Ekonomi","Manajemen","Akuntansi",
+    "Pendidikan","Matematika","Fisika","Kimia","Biologi","Informatika",
+    "Statistika","Pertanian","Peternakan","Farmasi","Keperawatan",
+    "Psikologi","Ilmu Komunikasi","Hubungan Internasional"
 ]
 
-# ================= TRAIN MODEL ML =================
-@st.cache_resource
-def train_model():
-    # Dataset simulasi (nanti bisa diganti dataset SNBP asli)
-    X = np.array([
-        [90,3],[88,3],[85,3],[82,2],[80,2],[78,2],
-        [75,2],[72,1],[70,1],[68,1],[65,1],[60,1]
-    ])
-    y = np.array([1,1,1,1,1,0,0,0,0,0,0,0])
+ptn_map = {ptn:i+1 for i,ptn in enumerate(ptn_list)}
+jurusan_map = {jur:i+1 for i,jur in enumerate(jurusan_list)}
 
-    model = LogisticRegression()
-    model.fit(X, y)
-    return model
+# ================= TRAINING DATA SIMULASI =================
+np.random.seed(42)
+X_train = []
+y_train = []
 
-model = train_model()
+for _ in range(500):
+    nilai = np.random.uniform(65, 95)
+    akreditasi = np.random.randint(0,2)
+    ptn = np.random.randint(1,11)
+    jurusan = np.random.randint(1,21)
+
+    skor = nilai + (akreditasi*5) + ptn + jurusan
+    diterima = 1 if skor > 120 else 0
+
+    X_train.append([nilai, akreditasi, ptn, jurusan])
+    y_train.append(diterima)
+
+model = RandomForestClassifier(n_estimators=200, random_state=42)
+model.fit(X_train, y_train)
 
 # ================= HOME =================
 if menu == "Home":
-    st.title("🎓 SNBP Predictor (Machine Learning)")
+    st.title("🎓 SNBP Predictor Advanced ML")
     st.write("""
-    Website ini memprediksi peluang kelulusan SNBP berdasarkan:
-    - File Excel nilai rapor semester 1–5
-    - Akreditasi sekolah
-    - Machine Learning (Logistic Regression)
+    Fitur:
+    - Upload nilai rapor Excel
+    - Prediksi peluang SNBP semua PTN & jurusan
+    - Machine Learning RandomForest
+    - Riwayat tersimpan database
+    - Grafik & ranking jurusan
     """)
 
-# ================= DOWNLOAD TEMPLATE =================
-elif menu == "Download Template":
-    st.title("📥 Download Template Excel Nilai Rapor")
-
-    template_df = pd.DataFrame({
-        "Mapel": ["Matematika","Bahasa Indonesia","Bahasa Inggris","Fisika","Kimia","Biologi"],
-        "Sem1": ["","","","","",""],
-        "Sem2": ["","","","","",""],
-        "Sem3": ["","","","","",""],
-        "Sem4": ["","","","","",""],
-        "Sem5": ["","","","","",""]
-    })
-
-    st.download_button(
-        "Download Template Excel",
-        template_df.to_excel(index=False),
-        file_name="template_nilai_rapor.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    with open("template_nilai_rapor.xlsx","rb") as f:
+        st.download_button("📥 Download Template Excel", f, "template_nilai_rapor.xlsx")
 
 # ================= UPLOAD & PREDIKSI =================
-elif menu == "Upload & Prediksi (ML)":
-    st.title("📤 Upload Excel & Prediksi SNBP (Machine Learning)")
+elif menu == "Upload & Prediksi":
+    st.title("📤 Upload & Prediksi")
 
-    nama = st.text_input("Nama Siswa")
+    uploaded_file = st.file_uploader("Upload file Excel", type=["xlsx"])
+
     akreditasi = st.selectbox("Akreditasi Sekolah", ["A","B","C"])
-    file = st.file_uploader("Upload file Excel nilai rapor", type=["xlsx"])
+    akreditasi_num = 1 if akreditasi == "A" else 0
 
-    if st.button("Prediksi"):
-        if nama.strip() == "" or file is None:
-            st.error("Nama siswa dan file Excel wajib diisi")
-        else:
-            df = pd.read_excel(file)
-            st.subheader("📄 Data Nilai dari Excel")
-            st.dataframe(df)
+    if uploaded_file:
+        df = pd.read_excel(uploaded_file)
 
-            try:
-                nilai = df.iloc[:,1:6].values.flatten()
-                nilai = nilai[~np.isnan(nilai)]
-                rata_rata = np.mean(nilai)
+        st.subheader("📄 Data Nilai")
+        st.dataframe(df)
 
-                st.success(f"📊 Rata-rata nilai rapor: {rata_rata:.2f}")
+        nilai_cols = ["Sem1","Sem2","Sem3","Sem4","Sem5"]
+        df["Rata-rata"] = df[nilai_cols].mean(axis=1)
 
-                akreditasi_map = {"A":3,"B":2,"C":1}
-                akr = akreditasi_map[akreditasi]
+        rata_rata_siswa = df["Rata-rata"].mean()
+        st.success(f"Rata-rata Nilai Rapor: {rata_rata_siswa:.2f}")
 
-                hasil = []
+        hasil = []
 
-                for univ in universitas_list:
-                    for jur in jurusan_list:
-                        input_data = np.array([[rata_rata, akr]])
-                        prob = model.predict_proba(input_data)[0][1] * 100
+        for ptn in ptn_list:
+            for jurusan in jurusan_list:
+                X_input = np.array([[rata_rata_siswa, akreditasi_num, ptn_map[ptn], jurusan_map[jurusan]]])
+                prob = model.predict_proba(X_input)[0][1] * 100
 
-                        hasil.append([
-                            nama, akreditasi, rata_rata,
-                            univ, jur, round(prob,2)
-                        ])
+                hasil.append([ptn, jurusan, round(prob,2)])
 
-                hasil_df = pd.DataFrame(
-                    hasil,
-                    columns=["Nama","Akreditasi","Rata-rata Nilai","Universitas","Jurusan","Peluang (%)"]
-                )
+                c.execute("INSERT INTO riwayat (rata_nilai, akreditasi, ptn, jurusan, peluang) VALUES (?,?,?,?,?)",
+                          (rata_rata_siswa, akreditasi, ptn, jurusan, prob))
 
-                st.subheader("🎯 Hasil Prediksi SNBP")
-                st.dataframe(hasil_df)
+        conn.commit()
 
-                for row in hasil:
-                    c.execute("INSERT INTO hasil VALUES (?,?,?,?,?,?)", row)
-                conn.commit()
+        hasil_df = pd.DataFrame(hasil, columns=["PTN","Jurusan","Peluang (%)"])
 
-                st.download_button(
-                    "Download Hasil Prediksi",
-                    hasil_df.to_csv(index=False),
-                    "hasil_prediksi_snbp_ml.csv",
-                    "text/csv"
-                )
+        st.subheader("📊 Hasil Prediksi")
+        st.dataframe(hasil_df)
 
-            except Exception as e:
-                st.error("Format Excel tidak sesuai template!")
-                st.write(e)
+        top10 = hasil_df.sort_values("Peluang (%)", ascending=False).head(10)
+        st.subheader("🏆 Top 10 Jurusan Terbaik")
+        st.table(top10)
 
-# ================= DATA & GRAFIK =================
-elif menu == "Data & Grafik":
-    st.title("📊 Data & Grafik")
+        fig, ax = plt.subplots(figsize=(10,5))
+        ax.bar(top10["Jurusan"], top10["Peluang (%)"])
+        plt.xticks(rotation=45)
+        ax.set_ylabel("Peluang (%)")
+        st.pyplot(fig)
 
-    df = pd.read_sql("SELECT * FROM hasil", conn)
+        st.download_button(
+            "Download Hasil Prediksi CSV",
+            hasil_df.to_csv(index=False),
+            "hasil_prediksi_snbp.csv",
+            "text/csv"
+        )
+
+# ================= DATA RIWAYAT =================
+elif menu == "Data Riwayat":
+    st.title("📁 Riwayat Prediksi")
+
+    df = pd.read_sql("SELECT * FROM riwayat", conn)
+
     if df.empty:
         st.warning("Belum ada data.")
     else:
         st.dataframe(df)
 
-        fig, ax = plt.subplots()
-        ax.bar(df["Universitas"], df["Peluang (%)"])
-        plt.xticks(rotation=45)
-        ax.set_ylabel("Peluang (%)")
-        st.pyplot(fig)
+        st.download_button(
+            "Download Riwayat CSV",
+            df.to_csv(index=False),
+            "riwayat_prediksi.csv",
+            "text/csv"
+        )
 
 # ================= LOGOUT =================
 elif menu == "Logout":
     st.session_state.login = False
     st.success("Logout berhasil")
-    st.rerun()
-
