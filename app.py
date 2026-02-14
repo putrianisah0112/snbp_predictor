@@ -28,8 +28,8 @@ if "login" not in st.session_state:
 
 def login():
     st.title("🔐 Login Guru")
-    user = st.text_input("Username")
-    pw = st.text_input("Password", type="password")
+    user = st.text_input("Username:guru")
+    pw = st.text_input("Password:123", type="password")
     if st.button("Login"):
         if user == "guru" and pw == "123":
             st.session_state.login = True
@@ -193,3 +193,4 @@ elif menu == "Logout":
     st.session_state.login = False
     st.success("Logout berhasil")
     st.rerun()
+
