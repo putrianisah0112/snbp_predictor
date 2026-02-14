@@ -43,10 +43,10 @@ if "login" not in st.session_state:
 
 def login():
     st.title("🔐 Login Guru")
-    user = st.text_input("Username")
-    pw = st.text_input("Password", type="password")
+    user = st.text_input("Username:Ayoprediksi")
+    pw = st.text_input("Password:123456", type="password")
     if st.button("Login"):
-        if user == "guru" and pw == "123":
+        if user == "Ayoprediksi" and pw == "123456":
             st.session_state.login = True
             st.success("Login berhasil")
         else:
@@ -216,3 +216,4 @@ elif menu == "Data Riwayat":
 elif menu == "Logout":
     st.session_state.login = False
     st.success("Logout berhasil")
+
