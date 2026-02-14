@@ -15,6 +15,7 @@ c = conn.cursor()
 c.execute("""
 CREATE TABLE IF NOT EXISTS riwayat (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nama_siswa TEXT,
     rata_nilai REAL,
     akreditasi TEXT,
     ptn TEXT,
@@ -106,6 +107,7 @@ if menu == "Home":
     st.write("""
     Fitur:
     - Upload nilai rapor Excel
+    - Input nama siswa
     - Prediksi peluang SNBP semua PTN & jurusan
     - Machine Learning RandomForest
     - Riwayat tersimpan database
@@ -119,12 +121,13 @@ if menu == "Home":
 elif menu == "Upload & Prediksi":
     st.title("📤 Upload & Prediksi")
 
+    nama_siswa = st.text_input("Nama Siswa")
     uploaded_file = st.file_uploader("Upload file Excel", type=["xlsx"])
 
     akreditasi = st.selectbox("Akreditasi Sekolah", ["A","B","C"])
     akreditasi_num = 1 if akreditasi == "A" else 0
 
-    if uploaded_file:
+    if uploaded_file and nama_siswa:
         df = pd.read_excel(uploaded_file)
 
         st.subheader("📄 Data Nilai")
@@ -143,14 +146,19 @@ elif menu == "Upload & Prediksi":
                 X_input = np.array([[rata_rata_siswa, akreditasi_num, ptn_map[ptn], jurusan_map[jurusan]]])
                 prob = model.predict_proba(X_input)[0][1] * 100
 
-                hasil.append([ptn, jurusan, round(prob,2)])
+                hasil.append([nama_siswa, akreditasi, ptn, jurusan, round(prob,2)])
 
-                c.execute("INSERT INTO riwayat (rata_nilai, akreditasi, ptn, jurusan, peluang) VALUES (?,?,?,?,?)",
-                          (rata_rata_siswa, akreditasi, ptn, jurusan, prob))
+                c.execute("""
+                INSERT INTO riwayat (nama_siswa, rata_nilai, akreditasi, ptn, jurusan, peluang)
+                VALUES (?,?,?,?,?,?)
+                """, (nama_siswa, rata_rata_siswa, akreditasi, ptn, jurusan, prob))
 
         conn.commit()
 
-        hasil_df = pd.DataFrame(hasil, columns=["PTN","Jurusan","Peluang (%)"])
+        hasil_df = pd.DataFrame(
+            hasil,
+            columns=["Nama Siswa","Akreditasi","PTN","Jurusan","Peluang (%)"]
+        )
 
         st.subheader("📊 Hasil Prediksi")
         st.dataframe(hasil_df)
@@ -171,6 +179,9 @@ elif menu == "Upload & Prediksi":
             "hasil_prediksi_snbp.csv",
             "text/csv"
         )
+
+    else:
+        st.info("Masukkan nama siswa dan upload file Excel.")
 
 # ================= DATA RIWAYAT =================
 elif menu == "Data Riwayat":
